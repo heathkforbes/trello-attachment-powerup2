@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: monospace;
+        padding: 12px;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <pre id="output">Loading...</pre>
+
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+    <script>
+      const t = window.TrelloPowerUp.iframe();
+
+      const attachments = t.arg("attachments") || [];
+
+      document.getElementById("output").textContent =
+        JSON.stringify(attachments, null, 2);
+
+      t.sizeTo("#output");
+    </script>
+  </body>
+</html>
