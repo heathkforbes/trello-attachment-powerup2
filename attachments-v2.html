@@ -23,19 +23,27 @@
         background: #f4f4f4;
         padding: 10px;
         border-radius: 6px;
-        max-height: 400px;
+        max-height: 300px;
         overflow: auto;
+      }
+
+      #status {
+        margin: 10px 0;
+        font-weight: bold;
       }
     </style>
   </head>
 
   <body>
     <button id="download-json">Download JSON</button>
-    <button id="download-attachments">Download all attachments</button>
+    <button id="download-zip">Download all attachments as ZIP</button>
+
+    <div id="status">Ready.</div>
 
     <pre id="output">Loading...</pre>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script>
       const t = window.TrelloPowerUp.iframe();
@@ -45,15 +53,31 @@
 
       document.getElementById("output").textContent = jsonText;
 
-      function safeFileName(name, index) {
-        if (!name) {
-          return "attachment-" + index;
-        }
+      function setStatus(message) {
+        document.getElementById("status").textContent = message;
+      }
 
-        return name
+      function safeFileName(name, index) {
+        const fallback = "attachment-" + index;
+
+        return (name || fallback)
           .replace(/[<>:"/\\|?*]+/g, "-")
           .replace(/\s+/g, " ")
           .trim();
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+
+        a.href = url;
+        a.download = filename;
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        URL.revokeObjectURL(url);
       }
 
       document
@@ -63,47 +87,68 @@
             type: "application/json"
           });
 
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-
-          a.href = url;
-          a.download = "attachments.json";
-          a.click();
-
-          URL.revokeObjectURL(url);
+          downloadBlob(blob, "attachments.json");
         });
 
       document
-        .getElementById("download-attachments")
-        .addEventListener("click", function () {
+        .getElementById("download-zip")
+        .addEventListener("click", async function () {
           if (!attachments.length) {
             alert("No attachments found on this card.");
             return;
           }
 
-          const confirmed = confirm(
-            "This will attempt to download " +
-              attachments.length +
-              " attachment(s). Your browser may ask you to allow multiple downloads."
-          );
+          const zip = new JSZip();
 
-          if (!confirmed) {
-            return;
+          zip.file("attachments.json", jsonText);
+
+          setStatus("Starting ZIP download...");
+
+          for (let i = 0; i < attachments.length; i++) {
+            const attachment = attachments[i];
+            const fileName = safeFileName(attachment.name, i + 1);
+
+            setStatus(
+              "Downloading " +
+                (i + 1) +
+                " of " +
+                attachments.length +
+                ": " +
+                fileName
+            );
+
+            try {
+              const response = await fetch(attachment.url);
+
+              if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+              }
+
+              const blob = await response.blob();
+
+              zip.file(fileName, blob);
+            } catch (error) {
+              zip.file(
+                "FAILED-" + fileName + ".txt",
+                "Could not download this attachment.\n\nURL:\n" +
+                  attachment.url +
+                  "\n\nError:\n" +
+                  error.message
+              );
+            }
           }
 
-          attachments.forEach(function (attachment, index) {
-            setTimeout(function () {
-              const a = document.createElement("a");
+          setStatus("Creating ZIP file...");
 
-              a.href = attachment.url;
-              a.download = safeFileName(attachment.name, index + 1);
-              a.target = "_blank";
-
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }, index * 500);
+          const zipBlob = await zip.generateAsync({
+            type: "blob"
           });
+
+          setStatus("Downloading ZIP...");
+
+          downloadBlob(zipBlob, "trello-card-attachments.zip");
+
+          setStatus("Done.");
         });
 
       t.sizeTo("body");
