@@ -6,7 +6,7 @@ function openDownloader(t) {
   return t.card("id", "name", "attachments").then(function (card) {
     return t.popup({
       title: "Attachments",
-      url: "https://heathkforbes.github.io/trello-attachment-powerup2/attachments-v2.html?v=13",
+      url: "https://heathkforbes.github.io/trello-attachment-powerup2/attachments-v2.html?v=15",
       args: {
         cardId: card.id,
         cardName: card.name,
