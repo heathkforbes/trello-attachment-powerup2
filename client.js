@@ -7,7 +7,7 @@ window.TrelloPowerUp.initialize({
           return t.card("attachments").then(function (card) {
             return t.popup({
               title: "Attachments JSON",
-              url: "./attachments.html",
+              url: "./attachments2.html",
               args: {
                 attachments: card.attachments || []
               }
