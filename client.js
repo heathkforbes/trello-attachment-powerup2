@@ -2,7 +2,7 @@ window.TrelloPowerUp.initialize({
   "card-buttons": function (t) {
     return [
       {
-        text: "Show attachments JSON",
+        text: "Download Power-Up",
         callback: function (t) {
           return t.card("attachments").then(function (card) {
             return t.popup({
