@@ -41,34 +41,22 @@
       #status {
         margin: 10px 0;
         font-weight: bold;
+        white-space: pre-wrap;
       }
     </style>
   </head>
 
   <body>
     <label for="token">Trello token:</label>
+    <input id="token" type="password" placeholder="Paste Trello token here" />
 
-    <input
-      id="token"
-      type="password"
-      placeholder="Paste Trello token here"
-    />
+    <button id="test-helper">Test local helper</button>
+    <button id="download-json">Download JSON</button>
+    <button id="download-local">Download attachments ZIP to laptop</button>
 
-    <button id="download-json">
-      Download JSON
-    </button>
+    <div id="status">Ready.</div>
 
-    <button id="download-local">
-      Download attachments ZIP to laptop
-    </button>
-
-    <div id="status">
-      Ready.
-    </div>
-
-    <pre id="output">
-Loading...
-    </pre>
+    <pre id="output">Loading...</pre>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
 
@@ -102,45 +90,48 @@ Loading...
 
       function downloadBlob(blob, filename) {
         const url = URL.createObjectURL(blob);
-
         const a = document.createElement("a");
 
         a.href = url;
         a.download = filename;
 
         document.body.appendChild(a);
-
         a.click();
-
         document.body.removeChild(a);
 
         URL.revokeObjectURL(url);
       }
 
       document
+        .getElementById("test-helper")
+        .addEventListener("click", async function () {
+          setStatus("Testing local helper...");
+
+          try {
+            const response = await fetch("http://127.0.0.1:8765/");
+            const text = await response.text();
+
+            setStatus("Helper replied:\n" + text);
+          } catch (error) {
+            setStatus("Helper test failed:\n" + error.message);
+            alert("Helper test failed: " + error.message);
+          }
+        });
+
+      document
         .getElementById("download-json")
         .addEventListener("click", function () {
+          const blob = new Blob([jsonText], {
+            type: "application/json"
+          });
 
-          const blob = new Blob(
-            [jsonText],
-            { type: "application/json" }
-          );
-
-          downloadBlob(
-            blob,
-            safeFileName(cardName) + "-attachments.json"
-          );
+          downloadBlob(blob, safeFileName(cardName) + "-attachments.json");
         });
 
       document
         .getElementById("download-local")
         .addEventListener("click", async function () {
-
-          const token =
-            document
-              .getElementById("token")
-              .value
-              .trim();
+          const token = document.getElementById("token").value.trim();
 
           if (!token) {
             alert("Paste your Trello token first.");
@@ -150,16 +141,13 @@ Loading...
           setStatus("Sending job to local helper...");
 
           try {
-
             const response = await fetch(
               "http://127.0.0.1:8765/download-card-attachments",
               {
                 method: "POST",
-
                 headers: {
                   "Content-Type": "application/json"
                 },
-
                 body: JSON.stringify({
                   token: token,
                   cardId: cardId,
@@ -172,31 +160,20 @@ Loading...
             const result = await response.json();
 
             if (!response.ok || !result.ok) {
-              throw new Error(
-                result.error || "Unknown server error"
-              );
+              throw new Error(result.error || "Unknown server error");
             }
 
-            setStatus(
-              "ZIP saved to Downloads folder:\n" +
-              result.path
-            );
+            setStatus("ZIP saved to Downloads folder:\n" + result.path);
 
-            alert(
-              "ZIP download completed successfully."
-            );
-
+            alert("ZIP download completed successfully.");
           } catch (error) {
-
             console.error(error);
 
-            setStatus(
-              "ERROR:\n" + error.message
-            );
+            setStatus("ERROR:\n" + error.message);
 
             alert(
               "Could not connect to local helper.\n\n" +
-              "Make sure Python server is running."
+                "Make sure Python server is running."
             );
           }
         });
