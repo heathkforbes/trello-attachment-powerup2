@@ -47,36 +47,45 @@
 
   <body>
     <label for="token">Trello token:</label>
-    <input id="token" type="password" placeholder="Paste Trello token here" />
 
-    <button id="download-json">Download JSON</button>
-    <button id="download-zip">Download all attachments as ZIP</button>
+    <input
+      id="token"
+      type="password"
+      placeholder="Paste Trello token here"
+    />
 
-    <div id="status">Ready.</div>
+    <button id="download-json">
+      Download JSON
+    </button>
 
-    <pre id="output">Loading...</pre>
+    <button id="download-local">
+      Download attachments ZIP to laptop
+    </button>
+
+    <div id="status">
+      Ready.
+    </div>
+
+    <pre id="output">
+Loading...
+    </pre>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script>
-      const APP_KEY = "9cd9af876d2fa7e06cf13dda583a6575";
-
       const t = window.TrelloPowerUp.iframe();
 
       const attachments = t.arg("attachments") || [];
       const cardId = t.arg("cardId");
       const cardName = t.arg("cardName") || "trello-card";
 
-      const jsonText = JSON.stringify(
-        {
-          cardId: cardId,
-          cardName: cardName,
-          attachments: attachments
-        },
-        null,
-        2
-      );
+      const jsonData = {
+        cardId: cardId,
+        cardName: cardName,
+        attachments: attachments
+      };
+
+      const jsonText = JSON.stringify(jsonData, null, 2);
 
       document.getElementById("output").textContent = jsonText;
 
@@ -84,10 +93,8 @@
         document.getElementById("status").textContent = message;
       }
 
-      function safeFileName(name, index) {
-        const fallback = "attachment-" + index;
-
-        return (name || fallback)
+      function safeFileName(name) {
+        return (name || "trello-card")
           .replace(/[<>:"/\\|?*]+/g, "-")
           .replace(/\s+/g, " ")
           .trim();
@@ -95,13 +102,16 @@
 
       function downloadBlob(blob, filename) {
         const url = URL.createObjectURL(blob);
+
         const a = document.createElement("a");
 
         a.href = url;
         a.download = filename;
 
         document.body.appendChild(a);
+
         a.click();
+
         document.body.removeChild(a);
 
         URL.revokeObjectURL(url);
@@ -110,91 +120,85 @@
       document
         .getElementById("download-json")
         .addEventListener("click", function () {
-          const blob = new Blob([jsonText], {
-            type: "application/json"
-          });
 
-          downloadBlob(blob, safeFileName(cardName, 1) + "-attachments.json");
+          const blob = new Blob(
+            [jsonText],
+            { type: "application/json" }
+          );
+
+          downloadBlob(
+            blob,
+            safeFileName(cardName) + "-attachments.json"
+          );
         });
 
       document
-        .getElementById("download-zip")
+        .getElementById("download-local")
         .addEventListener("click", async function () {
-          const token = document.getElementById("token").value.trim();
+
+          const token =
+            document
+              .getElementById("token")
+              .value
+              .trim();
 
           if (!token) {
             alert("Paste your Trello token first.");
             return;
           }
 
-          if (!attachments.length) {
-            alert("No attachments found on this card.");
-            return;
-          }
+          setStatus("Sending job to local helper...");
 
-          const zip = new JSZip();
+          try {
 
-          zip.file("attachments.json", jsonText);
+            const response = await fetch(
+              "http://127.0.0.1:8765/download-card-attachments",
+              {
+                method: "POST",
 
-          setStatus("Starting ZIP download...");
+                headers: {
+                  "Content-Type": "application/json"
+                },
 
-          for (let i = 0; i < attachments.length; i++) {
-            const attachment = attachments[i];
-            const fileName = safeFileName(attachment.name, i + 1);
-
-            setStatus(
-              "Downloading " +
-                (i + 1) +
-                " of " +
-                attachments.length +
-                ": " +
-                fileName
+                body: JSON.stringify({
+                  token: token,
+                  cardId: cardId,
+                  cardName: cardName,
+                  attachments: attachments
+                })
+              }
             );
 
-            try {
-              const downloadUrl =
-                "https://api.trello.com/1/cards/" +
-                cardId +
-                "/attachments/" +
-                attachment.id +
-                "/download/" +
-                encodeURIComponent(attachment.name) +
-                "?key=" +
-                APP_KEY +
-                "&token=" +
-                token;
+            const result = await response.json();
 
-              const response = await fetch(downloadUrl);
-
-              if (!response.ok) {
-                throw new Error("HTTP " + response.status);
-              }
-
-              const blob = await response.blob();
-
-              zip.file(fileName, blob);
-            } catch (error) {
-              zip.file(
-                "FAILED-" + fileName + ".txt",
-                "Could not download this attachment.\n\nURL:\n" +
-                  attachment.url +
-                  "\n\nError:\n" +
-                  error.message
+            if (!response.ok || !result.ok) {
+              throw new Error(
+                result.error || "Unknown server error"
               );
             }
+
+            setStatus(
+              "ZIP saved to Downloads folder:\n" +
+              result.path
+            );
+
+            alert(
+              "ZIP download completed successfully."
+            );
+
+          } catch (error) {
+
+            console.error(error);
+
+            setStatus(
+              "ERROR:\n" + error.message
+            );
+
+            alert(
+              "Could not connect to local helper.\n\n" +
+              "Make sure Python server is running."
+            );
           }
-
-          setStatus("Creating ZIP file...");
-
-          const zipBlob = await zip.generateAsync({
-            type: "blob"
-          });
-
-          setStatus("Downloading ZIP...");
-
-          downloadBlob(zipBlob, safeFileName(cardName, 1) + "-attachments.zip");
-
-          setStatus("Done.");
         });
 
       t.sizeTo("body");
