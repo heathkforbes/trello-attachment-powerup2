@@ -9,6 +9,17 @@
         padding: 12px;
       }
 
+      label {
+        font-weight: bold;
+      }
+
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 6px 0 10px 0;
+        padding: 8px;
+      }
+
       button {
         display: block;
         margin-bottom: 10px;
@@ -35,11 +46,14 @@
   </head>
 
   <body>
-    <button id="authorize">Authorize Trello access</button>
+    <label for="token">Trello token:</label>
+    <input id="token" type="password" placeholder="Paste Trello token here" />
+
     <button id="download-json">Download JSON</button>
     <button id="download-zip">Download all attachments as ZIP</button>
 
     <div id="status">Ready.</div>
+
     <pre id="output">Loading...</pre>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
@@ -47,14 +61,8 @@
 
     <script>
       const APP_KEY = "9cd9af876d2fa7e06cf13dda583a6575";
-      const APP_NAME = "Attachment JSON Test";
-      const APP_AUTHOR = "Heath Forbes";
 
-      const t = window.TrelloPowerUp.iframe({
-        appKey: APP_KEY,
-        appName: APP_NAME,
-        appAuthor: APP_AUTHOR
-      });
+      const t = window.TrelloPowerUp.iframe();
 
       const attachments = t.arg("attachments") || [];
       const cardId = t.arg("cardId");
@@ -100,44 +108,32 @@
       }
 
       document
-        .getElementById("authorize")
-        .addEventListener("click", async function () {
-          try {
-            const client = await t.getRestApi();
-            await client.authorize({ scope: "read" });
-            setStatus("Authorized.");
-          } catch (error) {
-            setStatus("Authorization failed: " + error.message);
-          }
-        });
-
-      document
         .getElementById("download-json")
         .addEventListener("click", function () {
           const blob = new Blob([jsonText], {
             type: "application/json"
           });
 
-          downloadBlob(blob, "attachments.json");
+          downloadBlob(blob, safeFileName(cardName, 1) + "-attachments.json");
         });
 
       document
         .getElementById("download-zip")
         .addEventListener("click", async function () {
+          const token = document.getElementById("token").value.trim();
+
+          if (!token) {
+            alert("Paste your Trello token first.");
+            return;
+          }
+
           if (!attachments.length) {
             alert("No attachments found on this card.");
             return;
           }
 
-          const client = await t.getRestApi();
-          const token = await client.getToken();
-
-          if (!token) {
-            alert("Please click Authorize Trello access first.");
-            return;
-          }
-
           const zip = new JSZip();
+
           zip.file("attachments.json", jsonText);
 
           setStatus("Starting ZIP download...");
@@ -175,11 +171,14 @@
               }
 
               const blob = await response.blob();
+
               zip.file(fileName, blob);
             } catch (error) {
               zip.file(
                 "FAILED-" + fileName + ".txt",
-                "Could not download this attachment.\n\nError:\n" +
+                "Could not download this attachment.\n\nURL:\n" +
+                  attachment.url +
+                  "\n\nError:\n" +
                   error.message
               );
             }
