@@ -35,21 +35,40 @@
   </head>
 
   <body>
+    <button id="authorize">Authorize Trello access</button>
     <button id="download-json">Download JSON</button>
     <button id="download-zip">Download all attachments as ZIP</button>
 
     <div id="status">Ready.</div>
-
     <pre id="output">Loading...</pre>
 
     <script src="https://p.trellocdn.com/power-up.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script>
-      const t = window.TrelloPowerUp.iframe();
+      const APP_KEY = "9cd9af876d2fa7e06cf13dda583a6575";
+      const APP_NAME = "Attachment JSON Test";
+      const APP_AUTHOR = "Heath Forbes";
+
+      const t = window.TrelloPowerUp.iframe({
+        appKey: APP_KEY,
+        appName: APP_NAME,
+        appAuthor: APP_AUTHOR
+      });
 
       const attachments = t.arg("attachments") || [];
-      const jsonText = JSON.stringify(attachments, null, 2);
+      const cardId = t.arg("cardId");
+      const cardName = t.arg("cardName") || "trello-card";
+
+      const jsonText = JSON.stringify(
+        {
+          cardId: cardId,
+          cardName: cardName,
+          attachments: attachments
+        },
+        null,
+        2
+      );
 
       document.getElementById("output").textContent = jsonText;
 
@@ -81,6 +100,18 @@
       }
 
       document
+        .getElementById("authorize")
+        .addEventListener("click", async function () {
+          try {
+            const client = await t.getRestApi();
+            await client.authorize({ scope: "read" });
+            setStatus("Authorized.");
+          } catch (error) {
+            setStatus("Authorization failed: " + error.message);
+          }
+        });
+
+      document
         .getElementById("download-json")
         .addEventListener("click", function () {
           const blob = new Blob([jsonText], {
@@ -98,8 +129,15 @@
             return;
           }
 
-          const zip = new JSZip();
+          const client = await t.getRestApi();
+          const token = await client.getToken();
 
+          if (!token) {
+            alert("Please click Authorize Trello access first.");
+            return;
+          }
+
+          const zip = new JSZip();
           zip.file("attachments.json", jsonText);
 
           setStatus("Starting ZIP download...");
@@ -118,21 +156,30 @@
             );
 
             try {
-              const response = await fetch(attachment.url);
+              const downloadUrl =
+                "https://api.trello.com/1/cards/" +
+                cardId +
+                "/attachments/" +
+                attachment.id +
+                "/download/" +
+                encodeURIComponent(attachment.name) +
+                "?key=" +
+                APP_KEY +
+                "&token=" +
+                token;
+
+              const response = await fetch(downloadUrl);
 
               if (!response.ok) {
                 throw new Error("HTTP " + response.status);
               }
 
               const blob = await response.blob();
-
               zip.file(fileName, blob);
             } catch (error) {
               zip.file(
                 "FAILED-" + fileName + ".txt",
-                "Could not download this attachment.\n\nURL:\n" +
-                  attachment.url +
-                  "\n\nError:\n" +
+                "Could not download this attachment.\n\nError:\n" +
                   error.message
               );
             }
@@ -146,7 +193,7 @@
 
           setStatus("Downloading ZIP...");
 
-          downloadBlob(zipBlob, "trello-card-attachments.zip");
+          downloadBlob(zipBlob, safeFileName(cardName, 1) + "-attachments.zip");
 
           setStatus("Done.");
         });
